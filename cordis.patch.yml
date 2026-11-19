@@ -1,8 +1,11 @@
-# Inserts the plugin with its own defaults. Workspace-specific settings belong in
-# your profile's cordis.patch.yml as an `- id: databricks-mlflow-tracing`
-# override; see the Install section of README.md for the fields that normally
-# differ. With no configuration the plugin traces to the Databricks profile the
-# CLI/SDK already defaults to, into /Users/<you>/dsh-conversations.
+# Inserts the plugin configured for this workspace. `profile` names the
+# ~/.databrickscfg entry whose workspace receives the traces, and
+# `experimentId` pins the MLflow experiment directly so no name lookup happens.
+# Change both if you point this at another workspace.
 - insert:
     - id: databricks-mlflow-tracing
       name: '@local/dsh-databricks-mlflow-tracing'
+      config:
+        profile: fevm-workshop-guy
+        experimentId: "1893648886440436"
+        experiment: dsh-conversations
