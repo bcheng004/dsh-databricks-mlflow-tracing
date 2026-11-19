@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Databricks MLflow tracing",
+    "description": "Sends every DeepSeek Harness conversation turn to MLflow as a trace: one AGENT span per turn, a CHAIN span per step, an LLM span per model call with its token usage, and a TOOL span per tool invocation. Traces land in the Databricks workspace of the configured profile, in the experiment named by the plugin configuration, and are grouped by session through the MLflow session metadata. Each turn is flushed when it ends, so a trace appears in MLflow while the session is still running. Content capture is on by default and can be turned off to record only structure, timing, and token counts; captured text is truncated to the configured character budgets. A failed sign-in or an unknown experiment is logged in the application log and retried at the next turn, and turning the plugin off stops tracing without affecting the conversation. The plugin makes no model requests, reads the session log the harness already commits, and sends trace data only to the configured MLflow tracking target."
+  }
+}

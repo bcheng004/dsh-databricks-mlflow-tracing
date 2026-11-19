@@ -1,0 +1,8 @@
+# Inserts the plugin with its own defaults. Workspace-specific settings belong in
+# your profile's cordis.patch.yml as an `- id: databricks-mlflow-tracing`
+# override; see the Install section of README.md for the fields that normally
+# differ. With no configuration the plugin traces to the Databricks profile the
+# CLI/SDK already defaults to, into /Users/<you>/dsh-conversations.
+- insert:
+    - id: databricks-mlflow-tracing
+      name: '@local/dsh-databricks-mlflow-tracing'

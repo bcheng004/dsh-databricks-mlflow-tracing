@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Databricks MLflow 对话追踪",
+    "description": "把 DeepSeek Harness 的每一轮对话作为一条 MLflow trace 上报：每轮一个 AGENT 根 span，每个 step 一个 CHAIN span，每次模型调用一个带 token 用量的 LLM span，每次工具调用一个 TOOL span。trace 写入所配置 profile 的 Databricks 工作区，落在插件配置指定的 experiment 中，并通过 MLflow 的 session 元数据按会话分组。每轮结束时立即刷新，因此会话仍在进行时就能在 MLflow 中看到该轮 trace。默认记录对话内容；关闭后只记录结构、耗时和 token 用量，且所有文本按配置的字符上限截断。登录失效或 experiment 不存在会写入应用日志，并在下一轮重试；停用插件只会停止追踪，不影响对话本身。插件不发起模型请求，只读取 harness 已经提交的 session 日志，并仅把 trace 数据发送到配置的 MLflow 追踪目标。"
+  }
+}
