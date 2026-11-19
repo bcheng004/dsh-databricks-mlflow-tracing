@@ -545,7 +545,20 @@ export async function apply(ctx, config) {
    * report without naming the plugin.
    * @returns {Promise<{mlflow: any, otel: any}>} the loaded modules.
    */
+  /**
+   * One SDK per process, shared across plugin reloads.
+   *
+   * `initializeSDK()` inside the MLflow SDK shuts the previous SDK down without
+   * awaiting it and then starts a new one. In a host process that has already
+   * registered an OpenTelemetry provider, the replacement never receives spans:
+   * the old provider is gone, the new one is unattached, and `flushTraces()`
+   * resolves in a millisecond having exported nothing. Reusing the instance
+   * that is already exporting avoids that entirely.
+   */
   async function loadSdk() {
+    const key = Symbol.for('dsh.databricks-mlflow-tracing.sdk')
+    const cached = globalThis[key]
+    if (cached !== undefined) return cached
     const imported = await import('mlflow-tracing')
     const mlflow = typeof imported?.init === 'function' ? imported : imported?.default
     if (mlflow === undefined || typeof mlflow.init !== 'function') {
@@ -557,7 +570,9 @@ export async function apply(ctx, config) {
     } catch {
       otel = undefined
     }
-    return { mlflow, otel }
+    const built = { mlflow, otel }
+    globalThis[Symbol.for('dsh.databricks-mlflow-tracing.sdk')] = built
+    return built
   }
 
   /**
@@ -763,8 +778,19 @@ export async function apply(ctx, config) {
     if (lastError !== '' && now - lastAttempt < options.retryIntervalMs) return false
     lastAttempt = now
     try {
-      if (sdk === undefined) sdk = await loadSdk()
       const resolved = await resolveTarget(false)
+      const signature = [resolved.trackingUri, resolved.experimentId, resolved.host ?? '', resolved.token ?? ''].join('|')
+      const cacheKey = Symbol.for('dsh.databricks-mlflow-tracing.signature')
+      if (sdk === undefined) sdk = await loadSdk()
+      if (globalThis[cacheKey] === signature) {
+        // Already initialised in this process with this exact target: reuse it
+        // rather than re-initialising, which would detach the span pipeline.
+        target = resolved
+        ready = true
+        lastError = ''
+        return true
+      }
+      globalThis[cacheKey] = signature
       sdk.mlflow.init({
         trackingUri: resolved.trackingUri,
         experimentId: resolved.experimentId,
