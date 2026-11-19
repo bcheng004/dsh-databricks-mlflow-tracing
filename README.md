@@ -18,6 +18,8 @@ Traces land in the MLflow experiment of the configured Databricks workspace and
 are grouped by conversation through MLflow's `mlflow.trace.session` metadata, so
 one session reads as a sequence of turns in the MLflow UI.
 
+![The Databricks MLflow tracing plugin page in DeepSeek Harness, showing its description and the span tree a turn produces](docs/deepseek-harness-plugin.webp)
+
 ## Why this exists
 
 The Harness already writes a complete, ordered session log: every turn boundary,

@@ -30,7 +30,8 @@
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
-    "README.md"
+    "README.md",
+    "docs"
   ],
   "dependencies": {
     "@databricks/sdk-experimental": "0.15.0",
