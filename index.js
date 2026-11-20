@@ -25,7 +25,8 @@
 import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { homedir, userInfo } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { existsSync } from 'node:fs'
 
 /**
  * Registered plugin name, also the prefix of every log line.
@@ -606,6 +607,11 @@ export async function apply(ctx, config) {
     if (host === undefined || host === '') {
       throw new Error(`profile "${profile}" has no host in ~/.databrickscfg; run databricks auth login --profile ${profile}, or set DATABRICKS_HOST`)
     }
+    // The SDK authenticates each export itself, so a token is only needed when
+    // this plugin must supply one (an OSS MLflow server with `trackingToken`).
+    if (options.trackingToken !== '' || isDatabricksTracking(options.trackingUri)) {
+      return { profile, host, token: undefined, expiresAt: Number.POSITIVE_INFINITY }
+    }
     const args = ['auth', 'token', '-o', 'json', '-p', profile]
     if (force) args.push('--force-refresh')
     let raw
@@ -727,7 +733,11 @@ export async function apply(ctx, config) {
     const experimentId = options.experimentId !== ''
       ? options.experimentId
       : await resolveDatabricksExperiment(options.experiment, auth)
-    return { trackingUri: 'databricks', experimentId, host: auth.host, token: auth.token }
+    // `databricks://<profile>` makes the MLflow SDK build its own Databricks
+    // Config and resolve credentials on every export, the same per-use model the
+    // LLM side uses. No token is captured here, so a rotation needs no restart
+    // and no re-initialisation.
+    return { trackingUri: `databricks://${profile}`, experimentId, host: auth.host }
   }
 
   /**
@@ -741,6 +751,9 @@ export async function apply(ctx, config) {
    */
   async function refreshCredentials() {
     if (!ready || sdk === undefined || credentials === undefined) return
+    // With profile-based authentication the SDK refreshes on its own; there is
+    // no captured token to replace and therefore no re-initialisation to do.
+    if (credentials.token === undefined) return
     if (credentials.expiresAt - Date.now() > options.refreshSkewMs) return
     for (const record of sessions.values()) {
       if (record.turn !== undefined) return
@@ -773,13 +786,27 @@ export async function apply(ctx, config) {
    * @returns {Promise<boolean>} whether tracing is ready.
    */
   async function ensureReady() {
+    // A GUI-launched host has a minimal PATH, and profile-based authentication
+    // shells out to `databricks`; make sure the CLI we already resolve is on it.
+    try {
+      const candidates = options.cliPath !== '' ? [options.cliPath, ...CLI_FALLBACKS] : CLI_FALLBACKS
+      for (const candidate of candidates) {
+        if (!existsSync(candidate)) continue
+        const dir = dirname(candidate)
+        if (!(process.env.PATH ?? '').split(':').includes(dir)) process.env.PATH = `${dir}:${process.env.PATH ?? ''}`
+        break
+      }
+    } catch {
+      // PATH handling must never break tracing.
+    }
+
     if (ready) return true
     const now = Date.now()
     if (lastError !== '' && now - lastAttempt < options.retryIntervalMs) return false
     lastAttempt = now
     try {
       const resolved = await resolveTarget(false)
-      const signature = [resolved.trackingUri, resolved.experimentId, resolved.host ?? '', resolved.token ?? ''].join('|')
+      const signature = [resolved.trackingUri, resolved.experimentId, resolved.host ?? ''].join('|')
       const cacheKey = Symbol.for('dsh.databricks-mlflow-tracing.signature')
       if (sdk === undefined) sdk = await loadSdk()
       if (globalThis[cacheKey] !== undefined && globalThis[cacheKey] !== signature) {
@@ -808,7 +835,8 @@ export async function apply(ctx, config) {
       sdk.mlflow.init({
         trackingUri: resolved.trackingUri,
         experimentId: resolved.experimentId,
-        ...(resolved.host !== undefined ? { host: resolved.host, databricksToken: resolved.token } : {}),
+        ...(resolved.host !== undefined ? { host: resolved.host } : {}),
+        ...(resolved.token !== undefined ? { databricksToken: resolved.token } : {}),
         ...(options.trackingToken !== '' ? { trackingServerToken: options.trackingToken } : {}),
       })
       target = resolved
