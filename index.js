@@ -782,6 +782,20 @@ export async function apply(ctx, config) {
       const signature = [resolved.trackingUri, resolved.experimentId, resolved.host ?? '', resolved.token ?? ''].join('|')
       const cacheKey = Symbol.for('dsh.databricks-mlflow-tracing.signature')
       if (sdk === undefined) sdk = await loadSdk()
+      if (globalThis[cacheKey] !== undefined && globalThis[cacheKey] !== signature) {
+        // The target changed, so the SDK has to be initialised again. Release
+        // the global tracer provider first: OpenTelemetry refuses to register a
+        // second one, and the SDK shuts the previous down without awaiting it,
+        // which leaves spans going nowhere and every flush emptying an empty
+        // queue. `trace.disable()` is the documented way back to a registrable
+        // state.
+        try {
+          sdk.otel?.trace?.disable?.()
+          await new Promise(resolve => setTimeout(resolve, 0))
+        } catch {
+          // Without the API, the re-initialisation below is no worse than before.
+        }
+      }
       if (globalThis[cacheKey] === signature) {
         // Already initialised in this process with this exact target: reuse it
         // rather than re-initialising, which would detach the span pipeline.
